@@ -19,7 +19,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("loal config fail\n%s", err)
 	}
-	log.Printf("%+v", c)
 	//创建三个图片文件夹
 	initDir(c)
 	if err != nil {
