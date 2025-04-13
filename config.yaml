@@ -6,13 +6,25 @@ server:
   originalDir: original
   randomNum: 10
   token: token
+  cors:
+    origins: ["*"]
+    methods: ["GET","POST","OPTIONS"]
+    headers: ["Origin","Content-Length","Content-Type","Authorization"]
+    credentials: true
 watermark:
+  enabled: true
   font: roboto.ttf
   text: withme.top
-  size: 24
+  pdi: 72
+  size: 50
   position:
-    x: 10
-    y: 10
+    x: 0
+    y: 0
+  color: 
+    r: 0
+    g: 0
+    b: 0
+    a: 255
 thumbnail:
   width: 200
   height: 0

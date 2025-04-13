@@ -19,7 +19,7 @@ func SetupImgBedRoute(router *gin.Engine, c config.Config) {
 			controller.DeleteImage(ctx, c)
 		})
 		ImgBedGroup.POST("list", middleware.Auth(c), func(ctx *gin.Context) { controller.List(ctx, c) })
-		ImgBedGroup.GET("i/:year/:month/:day/:filename", func(ctx *gin.Context) { controller.ShowImg(ctx, c) })
-		ImgBedGroup.GET("thumbnail/:year/:month/:day/:filename", func(ctx *gin.Context) { controller.ShowThumbnailImg(ctx, c) })
+		ImgBedGroup.GET("i/*filePath", func(ctx *gin.Context) { controller.ShowImg(ctx, c) })
+		ImgBedGroup.GET("thumbnail/*filePath", func(ctx *gin.Context) { controller.ShowThumbnailImg(ctx, c) })
 	}
 }

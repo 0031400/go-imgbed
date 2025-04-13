@@ -3,6 +3,8 @@ package controller
 import (
 	"fmt"
 	"image"
+	"image/color"
+	"image/draw"
 	"image/jpeg"
 	"image/png"
 	"imgbed/config"
@@ -17,6 +19,7 @@ import (
 	"github.com/chai2010/webp"
 	"github.com/disintegration/imaging"
 	"github.com/gin-gonic/gin"
+	"github.com/golang/freetype"
 )
 
 type FileInfo struct {
@@ -36,16 +39,12 @@ func UploadImage(ctx *gin.Context, c config.Config) {
 		return
 	}
 	ext := filepath.Ext(file.Filename)
-	if ext != ".png" && ext != ".jpg" && ext != ".jpeg" {
+	if ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".webp" {
 		InternalError(ctx, "not allowed image type")
 		log.Println(err)
 		return
 	}
-	now := time.Now()
-	year := now.Format("2006")
-	month := now.Format("01")
-	day := now.Format("02")
-	timePath := filepath.Join(year, month, day)
+	timePath := time.Now().Format("2006/01/02")
 	originalDirPath := filepath.Join(c.Server.OriginalDir, timePath)
 	if err := os.MkdirAll(originalDirPath, 0755); err != nil {
 		InternalError(ctx, "Failed to create original directory")
@@ -53,8 +52,8 @@ func UploadImage(ctx *gin.Context, c config.Config) {
 		return
 	}
 	randomString := util.GenerateRandomString(c.Server.RandomNum)
-	newFileName := randomString + ext
-	originalFilePath := filepath.Join(originalDirPath, newFileName)
+	newOriginalFileName := randomString + ext
+	originalFilePath := filepath.Join(originalDirPath, newOriginalFileName)
 	ctx.SaveUploadedFile(file, originalFilePath)
 	src, err := os.Open(originalFilePath)
 	if err != nil {
@@ -72,6 +71,8 @@ func UploadImage(ctx *gin.Context, c config.Config) {
 		img, err = jpeg.Decode(src)
 	case ".jpg":
 		img, err = jpeg.Decode(src)
+	case ".webp":
+		img, err = webp.Decode(src)
 	default:
 		InternalError(ctx, "Failed to decode image")
 		log.Println(err)
@@ -82,6 +83,20 @@ func UploadImage(ctx *gin.Context, c config.Config) {
 		log.Println(err)
 		return
 	}
+	//生成缩略图
+	thumbnailImg := imaging.Resize(img, c.Thumbnail.Width, c.Thumbnail.Height, imaging.Lanczos)
+	thumbnailDir := filepath.Join(c.Server.ThumbnailDir, timePath)
+	if err = os.MkdirAll(thumbnailDir, 0755); err != nil {
+		InternalError(ctx, "fail to create thumbnail dir")
+		log.Println(err)
+	}
+	err = imaging.Save(thumbnailImg, filepath.Join(thumbnailDir, newOriginalFileName))
+	if err != nil {
+		InternalError(ctx, "Failed to save thumbnail file")
+		log.Println(err)
+		return
+	}
+	//生成webp图
 	webpDirPath := filepath.Join(c.Server.PublicDir, timePath)
 	if err := os.MkdirAll(webpDirPath, 0755); err != nil {
 		InternalError(ctx, "Failed to create webp directory")
@@ -98,25 +113,47 @@ func UploadImage(ctx *gin.Context, c config.Config) {
 		return
 	}
 	defer webpFile.Close()
-	err = webp.Encode(webpFile, img, &webp.Options{Quality: float32(c.Quality)})
+	webpImg := img
+	//水印处理
+	if c.WaterMark.Enable {
+		NewDrawImg := image.NewRGBA(img.Bounds())
+		draw.Draw(NewDrawImg, img.Bounds(), img, image.Point{0, 0}, draw.Src)
+		fontBytes, err := os.ReadFile(c.WaterMark.Font)
+		if err != nil {
+			InternalError(ctx, "Failed to read font file")
+			log.Println(err)
+			return
+		}
+		font, err := freetype.ParseFont(fontBytes)
+		if err != nil {
+			InternalError(ctx, "Failed to parse font file")
+			log.Println(err)
+			return
+		}
+		f := freetype.NewContext()
+		f.SetDPI(float64(c.WaterMark.Pdi))
+		f.SetFont(font)
+		f.SetFontSize(float64(c.WaterMark.Size))
+		f.SetClip(img.Bounds())
+		f.SetDst(NewDrawImg)
+		f.SetSrc(image.NewUniform(color.RGBA{R: uint8(c.WaterMark.Color.R), G: uint8(c.WaterMark.Color.G), B: uint8(c.WaterMark.Color.B), A: uint8(c.WaterMark.Color.A)}))
+		pt := freetype.Pt(c.WaterMark.Position.X, c.WaterMark.Position.Y+c.WaterMark.Size)
+		_, err = f.DrawString(c.WaterMark.Text, pt)
+		if err != nil {
+			InternalError(ctx, "Failed to draw watermark")
+			log.Println(err)
+			return
+		}
+		webpImg = NewDrawImg
+	}
+	err = webp.Encode(webpFile, webpImg, &webp.Options{Quality: float32(c.Quality)})
 	if err != nil {
 		InternalError(ctx, "Failed to encode image to WebP")
 		log.Println(err)
 		return
 	}
-	thumbnailImg := imaging.Resize(img, c.Thumbnail.Width, c.Thumbnail.Height, imaging.Lanczos)
-	thumbnailDir := filepath.Join(c.Server.ThumbnailDir, timePath)
-	if err = os.MkdirAll(thumbnailDir, 0755); err != nil {
-		InternalError(ctx, "fail to create thumbnail dir")
-		log.Println(err)
-	}
-	err = imaging.Save(thumbnailImg, filepath.Join(thumbnailDir, newFileName))
-	if err != nil {
-		InternalError(ctx, "Failed to save thumbnail file")
-		log.Println(err)
-		return
-	}
-	imgPath := fmt.Sprintf("%s/%s/%s/%s", year, month, day, webpFileName)
+
+	imgPath := fmt.Sprintf("%s/%s", timePath, webpFileName)
 	ctx.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"data": imgPath,
@@ -191,8 +228,7 @@ func List(ctx *gin.Context, c config.Config) {
 	originalDir := filepath.Join(append([]string{c.Server.OriginalDir}, filePathList...)...)
 	_, err := os.Stat(originalDir)
 	if err != nil {
-
-		InternalError(ctx, "fail to list file")
+		InternalError(ctx, "fail to open dir")
 		log.Println(err)
 		return
 	}
@@ -214,16 +250,10 @@ func List(ctx *gin.Context, c config.Config) {
 	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": fileList})
 }
 func ShowImg(ctx *gin.Context, c config.Config) {
-	year := ctx.Param("year")
-	month := ctx.Param("month")
-	day := ctx.Param("day")
-	filename := ctx.Param("filename")
-	ctx.File(filepath.Join(c.Server.PublicDir, year, month, day, filename))
+	filePath := ctx.Param("filePath")
+	ctx.File(filepath.Join(c.Server.PublicDir, filePath))
 }
 func ShowThumbnailImg(ctx *gin.Context, c config.Config) {
-	year := ctx.Param("year")
-	month := ctx.Param("month")
-	day := ctx.Param("day")
-	filename := ctx.Param("filename")
-	ctx.File(filepath.Join(c.Server.ThumbnailDir, year, month, day, filename))
+	filePath := ctx.Param("filePath")
+	ctx.File(filepath.Join(c.Server.ThumbnailDir, filePath))
 }

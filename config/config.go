@@ -17,15 +17,29 @@ type Config struct {
 		PublicDir    string `yaml:"publicDir"`
 		RandomNum    int    `yaml:"randomNum"`
 		Token        string `yaml:"token"`
+		Cors         struct {
+			Origins     []string `yaml:"origins"`
+			Methods     []string `yaml:"methods"`
+			Headers     []string `yaml:"headers"`
+			Credentials bool     `yaml:"credentials"`
+		} `yaml:"cors"`
 	} `yaml:"server"`
 	WaterMark struct {
-		font     string `yaml:"font"`
-		text     string `yaml:"text"`
-		size     int    `yaml:"size"`
+		Enable   bool   `yaml:"enabled"`
+		Font     string `yaml:"font"`
+		Text     string `yaml:"text"`
+		Size     int    `yaml:"size"`
+		Pdi      int    `yaml:"pdi"`
 		Position struct {
-			x int `yaml:"x"`
-			y int `yaml:"y"`
-		}
+			X int `yaml:"x"`
+			Y int `yaml:"y"`
+		} `yaml:"position"`
+		Color struct {
+			R int `yaml:"r"`
+			G int `yaml:"g"`
+			B int `yaml:"b"`
+			A int `yaml:"a"`
+		} `yaml:"color"`
 	} `yaml:"watermark"`
 	Thumbnail struct {
 		Width  int `yaml:"width"`
