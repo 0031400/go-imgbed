@@ -1,0 +1,20 @@
+server:
+  host: "127.0.0.1"
+  port: 8080
+  publicDir: public
+  thumbnailDir: thumbnail
+  originalDir: original
+  randomNum: 10
+  token: token
+watermark:
+  font: roboto.ttf
+  text: withme.top
+  size: 24
+  position:
+    x: 10
+    y: 10
+thumbnail:
+  width: 200
+  height: 0
+quality: 75
+logFile: "log.txt"
